@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>36张纸牌 (1-9) - V26 过牌禁杠修复版</title>
+    <style>
+        :root { --table-green: radial-gradient(circle, #2E7D32 0%, #1B5E20 100%); }
+        body { margin: 0; background: var(--table-green); font-family: 'Microsoft YaHei', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
+        .header { padding: 10px; text-align: center; background: rgba(0, 0, 0, 0.4); box-shadow: 0 2px 10px rgba(0,0,0,0.5); z-index: 10;}
+        .table-center { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; }
+        .timer-display { font-size: 32px; font-weight: bold; color: #00FF00; text-shadow: 0 0 10px #00FF00; margin-top: 5px; }
+        .timer-warning { color: #FF3333; text-shadow: 0 0 10px #FF3333; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .opponents { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; z-index: 5; pointer-events: none;}
+        .opponent { background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.3); text-align: center; min-width: 90px; transition: all 0.3s; }
+        .opponent.active { border-color: #FFD700; box-shadow: 0 0 15px #FFD700; transform: scale(1.1); }
+        .opponent.danger { border-color: #FF3333; box-shadow: 0 0 15px #FF3333; }
+        .opponent.passed { opacity: 0.5; filter: grayscale(100%); border-style: dashed; }
+        .play-zone { position: absolute; display: flex; align-items: center; justify-content: center; width: 160px; height: 120px; transition: all 0.3s;}
+        .zone-0 { bottom: 5px; left: 50%; transform: translateX(-50%); } 
+        .zone-2 { top: 70px; left: 50%; transform: translateX(-50%); }   
+        .zone-3 { left: 10%; top: 50%; transform: translateY(-50%); }  
+        .zone-1 { right: 10%; top: 50%; transform: translateY(-50%); } 
+        .played-cards { display: flex; gap: -40px; transform: scale(0.65); transform-origin: center;}
+        .card { width: 85px; height: 125px; background: #FAFAFA; border-radius: 8px; border: 1px solid #ccc; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; box-sizing: border-box; box-shadow: -3px 3px 8px rgba(0,0,0,0.5); color: #212121; cursor: pointer; user-select: none; transition: transform 0.2s, margin 0.2s;}
+        .card.red { color: #D32F2F; }
+        .card-top { font-size: 18px; font-weight: bold; line-height: 1; text-align: left; }
+        .card-center { font-size: 45px; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
+        .card-bottom { font-size: 18px; font-weight: bold; text-align: right; line-height: 1; }
+        .hand .card:hover { transform: translateY(-15px); z-index: 100 !important; }
+        .hand .card.selected { transform: translateY(-25px); border: 2px solid #FFD700; z-index: 100 !important;}
+        .pass-text { color: #FFF; opacity: 0.8; font-size: 18px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 15px; }
+        .panel { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); border: 2px solid #FFD700; padding: 25px; border-radius: 15px; z-index: 200; text-align: center; width: 90%; max-width: 950px;}
+        .score-table { width: 100%; border-collapse: collapse; margin-top: 10px; color: #FFF; font-size: 13px; }
+        .score-table th, .score-table td { border: 1px solid rgba(255,255,255,0.2); padding: 6px; text-align: center; }
+        .highlight-green { color: #4CAF50; font-weight: bold; }
+        .highlight-red { color: #FF3333; font-weight: bold; }
+        .special-event-title { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #FFD700; text-shadow: 0 0 10px #FFD700; }
+        .player-area { height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 20px; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);}
+        .actions { margin-bottom: 10px; display: flex; gap: 15px; }
+        button { padding: 10px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 25px; cursor: pointer; transition: 0.2s;}
+        .btn-play { background: #FFD700; color: #333; }
+        .btn-pass { background: #E0E0E0; color: #333; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .hand { display: flex; gap: -10px; justify-content: center; height: 130px; padding: 0 20px;}
+        #msg-log { color: #FFD700; font-size: 16px; font-weight: bold; margin-top: 5px;}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>36张纸牌(1-9) - V26 过牌禁杠修复版</h2>
+        <div id="msg-log">游戏初始化...</div>
+        <div class="timer-display" id="main-timer">--</div>
+    </div>
+    <div class="table-center">
+        <div class="opponents">
+            <div class="opponent" id="op-3">上家</div>
+            <div class="opponent" id="op-2">对家</div>
+            <div class="opponent" id="op-1">下家</div>
+        </div>
+        <div class="play-zone zone-3" id="pz-3"></div> 
+        <div class="play-zone zone-2" id="pz-2"></div> 
+        <div class="play-zone zone-1" id="pz-1"></div> 
+        <div class="play-zone zone-0" id="pz-0"></div> 
+        
+        <div id="kong-panel" class="panel">
+            <h3>触发【杠】牌！ <span id="kong-timer" style="color:#FF3333;font-size:28px;">6</span>s</h3>
+            <p style="font-size:16px; color:#CCC;">抢断牌权！(独立赢15分，不算炸弹)</p>
+            <button class="btn-play" onclick="confirmKong()">直接杠！</button>
+            <button class="btn-pass" onclick="cancelKong()">不杠</button>
+        </div>
+
+        <div id="score-panel" class="panel">
+            <h3>V26 对局结算清单 (基准:5分)</h3>
+            <div id="score-content"></div>
+            <button class="btn-play" onclick="location.reload()">再来一局</button>
+        </div>
+    </div>
+    <div class="player-area">
+        <div class="actions">
+            <button class="btn-play" id="btn-play" onclick="humanPlay()">出牌</button>
+            <button class="btn-pass" id="btn-pass" onclick="humanPass()">不出</button>
+        </div>
+        <div class="hand" id="player-hand"></div>
+    </div>
+
+    <script>
+        const suitRanks = {'♠':4, '♥':3, '♣':2, '♦':1}, suits = ['♠', '♥', '♣', '♦'], values = ['9', '8', '7', '6', '5', '4', '3', '2', '1'];
+        const rankMap = {'9':9, '8':8, '7':7, '6':6, '5':5, '4':4, '3':3, '2':2, '1':1}, BASE_SCORE = 5;
+        let players = [], table = { cards: [], type: 0, comboLevel: 0, rank: 0, suitRank: 0, owner: -1 };
+        let currentRoundPlays = { 0: null, 1: null, 2: null, 3: null }, currentPlayer = -1, isFirstTurn = true;
+        let bombCount = 0, sfCount = 0, kongPenalties = { 0:0, 1:0, 2:0, 3:0 }, finalPlayCards = [];
+        let mainTimerInterval = null, turnTimeLeft = 10, pendingKongState = null, kongTimerInterval = null;
+
+        // === 计分系统状态 ===
+        let sequenceOneStatus = { active: false, players: [] }; 
+        let activeRedPairs = {}; 
+        let blackHitsRedPenalties = { 0:0, 1:0, 2:0, 3:0 }; 
+        let seqOnePenalties = { 0:0, 1:0, 2:0, 3:0 }; 
+
+        function initGame() {
+            let deck = [];
+            suits.forEach(s => values.forEach(v => deck.push({ v, s, color: (s==='♦'||s==='♥')?'red':'black', id: s+v, selected: false })));
+            deck.sort(() => Math.random() - 0.5);
+            for(let i=0; i<4; i++) {
+                players[i] = { id: i, name: i===0?'你':['下家','对家','上家'][i-1], hand: deck.slice(i*9, i*9+9), hasPlayed: false, passedThisRound: false, isAI: i!==0 };
+                players[i].hand.sort((a,b) => rankMap[b.v] - rankMap[a.v] || suitRanks[b.s] - suitRanks[a.s]);
+                if(players[i].hand.some(c => c.id === '♦1')) currentPlayer = i;
+            }
+            updateUI(); log(`拿到 ♦1 者发牌。`); setTimeout(startTurn, 1000);
+        }
+
+        function updateUI() {
+            const handDiv = document.getElementById('player-hand'); handDiv.innerHTML = '';
+            players[0].hand.forEach((card) => {
+                let el = document.createElement('div'); el.className = `card ${card.color} ${card.selected?'selected':''}`;
+                el.innerHTML = `<div class="card-top">${card.v}</div><div class="card-center">${card.s}</div><div class="card-bottom">${card.v}</div>`;
+                el.onclick = () => { if(!players[0].passedThisRound) { card.selected = !card.selected; updateUI(); }};
+                handDiv.appendChild(el);
+            });
+            for(let i=1; i<=3; i++) {
+                let opDiv = document.getElementById(`op-${i}`);
+                opDiv.innerHTML = `${players[i].name}<br>剩 ${players[i].hand.length}`;
+                opDiv.className = `opponent ${currentPlayer===i?'active':''} ${players[i].hand.length===1?'danger':''} ${players[i].passedThisRound?'passed':''}`;
+            }
+            document.getElementById('btn-play').disabled = (currentPlayer!==0 || players[0].passedThisRound);
+            document.getElementById('btn-pass').disabled = (currentPlayer!==0 || table.owner===-1 || players[0].passedThisRound);
+            renderRoundPlays();
+        }
+
+        function renderRoundPlays() {
+            for(let i=0; i<4; i++) {
+                let zone = document.getElementById(`pz-${i}`), action = currentRoundPlays[i]; zone.innerHTML = '';
+                if(action === "PASS") zone.innerHTML = `<div class="pass-text">不出</div>`;
+                else if(action === "KONG_STOLEN") zone.innerHTML = `<div class="pass-text" style="color:#FFD700; background:rgba(200,0,0,0.6);">被杠走!</div>`;
+                else if(Array.isArray(action)) {
+                    let html = '<div class="played-cards">';
+                    action.forEach(c => html += `<div class="card ${c.color}"><div class="card-top">${c.v}</div><div class="card-center">${c.s}</div><div class="card-bottom">${c.v}</div></div>`);
+                    zone.innerHTML = html + '</div>';
+                }
+            }
+        }
+
+        function log(msg) { document.getElementById('msg-log').innerText = msg; }
+
+        function startTurnTimer() {
+            if (mainTimerInterval) clearInterval(mainTimerInterval);
+            turnTimeLeft = 10;
+            const timerEl = document.getElementById('main-timer');
+            timerEl.innerText = turnTimeLeft + "s"; timerEl.className = 'timer-display';
+            mainTimerInterval = setInterval(() => {
+                turnTimeLeft--; timerEl.innerText = turnTimeLeft + "s";
+                if (turnTimeLeft <= 3) timerEl.className = 'timer-display timer-warning';
+                if (turnTimeLeft <= 0) { clearInterval(mainTimerInterval); handleTimeout(); }
+            }, 1000);
+        }
+
+        function stopTurnTimer() { if(mainTimerInterval) clearInterval(mainTimerInterval); document.getElementById('main-timer').innerText = "--"; }
+
+        function handleTimeout() {
+            if (isFirstTurn) { executePlay(currentPlayer, [players[currentPlayer].hand.find(c => c.id === '♦1')]); }
+            else if (table.owner === -1 || table.owner === currentPlayer) { executePlay(currentPlayer, [players[currentPlayer].hand[players[currentPlayer].hand.length-1]]); }
+            else { executePass(currentPlayer); }
+        }
+
+        function parseCards(cards) {
+            if(cards.length===0 || cards.length>5) return null;
+            let valCounts = {}; cards.forEach(c => valCounts[c.v] = (valCounts[c.v]||0)+1);
+            let counts = Object.values(valCounts).sort((a,b)=>b-a);
+            let isFlush = cards.every(c => c.s === cards[0].s);
+            let sorted = [...cards].sort((a,b) => rankMap[a.v] - rankMap[b.v]);
+            let isStr = cards.length===5 && sorted.every((c,i)=>i===0 || rankMap[c.v]-rankMap[sorted[i-1].v]===1);
+            
+            let isPureRedPair = false, isPureBlackPair = false;
+            if(cards.length===2 && counts[0]===2) {
+                isPureRedPair = cards.every(c => c.color === 'red');
+                isPureBlackPair = cards.every(c => c.color === 'black');
+            }
+
+            if(cards.length===1) return { type:1, comboLevel:0, rank:rankMap[cards[0].v], suitRank:suitRanks[cards[0].s] };
+            if(cards.length===2 && counts[0]===2) return { type:2, comboLevel:0, rank:rankMap[cards[0].v], suitRank:Math.max(...cards.map(c=>suitRanks[c.s])), isPureRed: isPureRedPair, isPureBlack: isPureBlackPair };
+            if(cards.length===3 && counts[0]===3) return { type:3, comboLevel:0, rank:rankMap[cards[0].v], suitRank:Math.max(...cards.map(c=>suitRanks[c.s])) };
+            if(cards.length===4 && counts[0]===4) return { type:4, comboLevel:4, rank:rankMap[cards[0].v], suitRank:4 };
+            if(cards.length===5) {
+                if(isStr && isFlush) return { type:5, comboLevel:5, rank:rankMap[sorted[4].v], suitRank:suitRanks[sorted[4].s] };
+                if(counts[0]===3 && counts[1]===2) return { type:5, comboLevel:3, rank:rankMap[Object.keys(valCounts).find(k=>valCounts[k]===3)], suitRank:4 };
+                if(isFlush) return { type:5, comboLevel:2, rank:rankMap[sorted[4].v], suitRank:suitRanks[sorted[4].s] };
+                if(isStr) return { type:5, comboLevel:1, rank:rankMap[sorted[4].v], suitRank:suitRanks[sorted[4].s] };
+            }
+            return null;
+        }
+
+        function getAbsMax(p) { return p.hand[0]; } 
+
+        function isValidPlay(p, c) {
+            let i = parseCards(c); if(!i) return {valid:false, msg:"牌型不合法"};
+            if(isFirstTurn && !c.some(x=>x.id==='♦1')) return {valid:false, msg:"必须包含 ♦1"};
+            if(!p.hasPlayed && c.some(x=>x.v==='9')) return {valid:false, msg:"未破冰禁出9"};
+            
+            let nextPlayer = players[(p.id + 1) % 4];
+            if(c.length === 1 && nextPlayer.hand.length === 1) {
+                let maxSingle = getAbsMax(p);
+                if(c[0].id !== maxSingle.id) return {valid:false, msg:`下家报单，打单张必须出最大的 ${maxSingle.v}！`};
+            }
+
+            if(table.owner!==-1 && table.owner!==p.id) {
+                if(i.comboLevel===5) { if(table.comboLevel===5 && (i.rank<table.rank || (i.rank===table.rank && i.suitRank<=table.suitRank))) return {valid:false, msg:"同花顺不够大"}; return {valid:true}; }
+                if(i.comboLevel===4) { if(table.comboLevel===5) return {valid:false}; if(table.comboLevel===4 && i.rank<table.rank) return {valid:false}; return {valid:true}; }
+                if(i.type!==table.type) return {valid:false, msg:"牌型不匹配"};
+                if(i.rank<table.rank || (i.rank===table.rank && i.suitRank<=table.suitRank)) return {valid:false, msg:"点数/花色不够大"};
+            }
+            return {valid:true};
+        }
+
+        // ================= 核心修复：过牌禁杠逻辑 =================
+        function checkKong(playedCard, originId) {
+            for(let i=0; i<4; i++) {
+                if(i === originId) continue;
+                // 如果该玩家本轮已经“过牌”，则剥夺其杠牌权利
+                if(players[i].passedThisRound) continue; 
+                
+                let matching = players[i].hand.filter(c => c.v === playedCard.v);
+                if(matching.length === 3) return { canKong: true, playerId: i, cards: matching };
+            }
+            return { canKong: false };
+        }
+        // ========================================================
+
+        function showPlayerKongPanel() {
+            stopTurnTimer();
+            document.getElementById('kong-panel').style.display = 'block';
+            let t = 6; document.getElementById('kong-timer').innerText = t;
+            if(kongTimerInterval) clearInterval(kongTimerInterval);
+            kongTimerInterval = setInterval(() => {
+                t--; document.getElementById('kong-timer').innerText = t;
+                if(t <= 0) { clearInterval(kongTimerInterval); cancelKong(); }
+            }, 1000);
+        }
+
+        function confirmKong() { clearInterval(kongTimerInterval); document.getElementById('kong-panel').style.display='none'; executeKong(); }
+        function cancelKong() { clearInterval(kongTimerInterval); document.getElementById('kong-panel').style.display='none'; pendingKongState=null; advanceTurn(); }
+
+        function executeKong() {
+            let { kPlayerId, kCards, playedCard, originId } = pendingKongState;
+            let kPlayer = players[kPlayerId];
+            kPlayer.hand = kPlayer.hand.filter(c => !kCards.find(sc => sc.id === c.id));
+            kPlayer.hasPlayed = true;
+            
+            kongPenalties[kPlayerId] += 15;
+            kongPenalties[originId] -= 15;
+            
+            sequenceOneStatus.active = false; 
+
+            let bombCards = [...kCards, playedCard];
+            currentRoundPlays[originId] = "KONG_STOLEN";
+            currentRoundPlays[kPlayerId] = bombCards;
+            
+            log(`震撼！【${kPlayer.name}】 杠了！`);
+            updateUI();
+            
+            if(kPlayer.hand.length === 0) { 
+                finalPlayCards = bombCards; 
+                setTimeout(() => calculateScore(kPlayerId), 800); 
+                return; 
+            }
+
+            pendingKongState = null;
+            table.owner = -1; currentPlayer = kPlayerId; 
+            players.forEach(p => p.passedThisRound = false); 
+            setTimeout(() => { currentRoundPlays = { 0: null, 1: null, 2: null, 3: null }; startTurn(); }, 2000);
+        }
+
+        function executePlay(idx, cards) {
+            stopTurnTimer();
+            let pInfo = parseCards(cards);
+            if(pInfo.comboLevel === 4) bombCount++;
+            if(pInfo.comboLevel === 5) sfCount++;
+            players[idx].hand = players[idx].hand.filter(c => !cards.find(sc => sc.id === c.id));
+            players[idx].hasPlayed = true; 
+            
+            if(isFirstTurn) {
+                if(cards.length === 1 && cards[0].id === '♦1') {
+                    sequenceOneStatus.active = true;
+                    sequenceOneStatus.players.push({id: idx, card: '♦1'});
+                }
+            } else if(sequenceOneStatus.active) {
+                if(cards.length === 1 && cards[0].v === '1') {
+                    sequenceOneStatus.players.push({id: idx, card: cards[0].id});
+                    if(sequenceOneStatus.players.length === 4) {
+                        let expected = ['♦1', '♣1', '♥1', '♠1'];
+                        let actual = sequenceOneStatus.players.map(p => p.card);
+                        if(JSON.stringify(expected) === JSON.stringify(actual)) {
+                            let originId = sequenceOneStatus.players[0].id;
+                            seqOnePenalties[originId] -= 15;
+                            sequenceOneStatus.players.slice(1).forEach(p => seqOnePenalties[p.id] += 5);
+                            log("💥 触发【首发连环1劫】！方片1玩家被全场压制！");
+                        }
+                        sequenceOneStatus.active = false; 
+                    }
+                } else {
+                    sequenceOneStatus.active = false; 
+                }
+            }
+
+            if (table.owner === -1 || pInfo.type !== table.type || pInfo.rank < table.rank) {
+                players.forEach(p => p.passedThisRound = false);
+                currentRoundPlays = { 0: null, 1: null, 2: null, 3: null };
+                activeRedPairs = {}; 
+            }
+
+            if (pInfo.type === 2) {
+                if (pInfo.isPureRed) {
+                    activeRedPairs[pInfo.rank] = idx; 
+                } else if (pInfo.isPureBlack) {
+                    if (activeRedPairs[pInfo.rank] !== undefined && activeRedPairs[pInfo.rank] !== idx) {
+                        let targetId = activeRedPairs[pInfo.rank];
+                        blackHitsRedPenalties[idx] += 5;
+                        blackHitsRedPenalties[targetId] -= 5;
+                        log(`⚔️ 【黑双煞】压制【红双煞】！赢得 5 分！`);
+                    }
+                }
+            }
+            
+            isFirstTurn = false;
+            table = { cards, type: pInfo.type, comboLevel: pInfo.comboLevel, rank: pInfo.rank, suitRank: pInfo.suitRank, owner: idx };
+            currentRoundPlays[idx] = cards; updateUI();
+
+            if(players[idx].hand.length === 0) { finalPlayCards = cards; setTimeout(()=>calculateScore(idx), 800); return; }
+            
+            if(cards.length === 1) {
+                let kongCheck = checkKong(cards[0], idx);
+                if(kongCheck.canKong) {
+                    pendingKongState = { kPlayerId: kongCheck.playerId, kCards: kongCheck.cards, playedCard: cards[0], originId: idx };
+                    if(kongCheck.playerId === 0) {
+                        showPlayerKongPanel(); return; 
+                    } else {
+                        log(`[警告] 等待杠牌...`); setTimeout(() => executeKong(), 1500); return; 
+                    }
+                }
+            }
+
+            advanceTurn();
+        }
+
+        function executePass(idx) {
+            stopTurnTimer(); log(`${players[idx].name} 选择不出。`);
+            currentRoundPlays[idx] = "PASS"; players[idx].passedThisRound = true; 
+            if(idx === 0) players[0].hand.forEach(c => c.selected = false);
+            sequenceOneStatus.active = false; 
+            advanceTurn();
+        }
+
+        function advanceTurn() {
+            let safety = 0;
+            do {
+                currentPlayer = (currentPlayer + 1) % 4; safety++;
+                if (table.owner !== -1 && currentPlayer === table.owner) {
+                    table.owner = -1; players.forEach(p => p.passedThisRound = false);
+                    log(`轮次重置。`);
+                    setTimeout(() => { currentRoundPlays = { 0: null, 1: null, 2: null, 3: null }; startTurn(); }, 800);
+                    return;
+                }
+            } while (players[currentPlayer].passedThisRound && safety < 4);
+            startTurn();
+        }
+
+        function startTurn() {
+            updateUI(); startTurnTimer();
+            if (players[currentPlayer].isAI) {
+                setTimeout(() => doAITurn(players[currentPlayer]), 1000 + Math.random()*1000);
+            }
+        }
+
+        function doAITurn(ai) {
+            let possible = [], grouped = {}; ai.hand.forEach(c => { grouped[c.v] = (grouped[c.v]||[]); grouped[c.v].push(c); });
+            Object.values(grouped).forEach(g => { if(g.length>=1) possible.push([g[0]]); if(g.length>=2) possible.push([g[0],g[1]]); if(g.length>=3) possible.push([g[0],g[1],g[2]]); if(g.length===4) possible.push(g); });
+            let ranks = [...new Set(ai.hand.map(c => rankMap[c.v]))].sort((a,b)=>a-b);
+            for(let j=0; j<=ranks.length-5; j++) { if(ranks[j+4]-ranks[j]===4) { let s=[]; [0,1,2,3,4].forEach(k=>s.push(ai.hand.find(x=>rankMap[x.v]===ranks[j+k]))); possible.push(s); }}
+            
+            let valid = possible.filter(c => isValidPlay(ai, c).valid);
+            if(valid.length > 0) {
+                valid.sort((a,b) => parseCards(a).rank - parseCards(b).rank);
+                executePlay(ai.id, valid[0]);
+            } else executePass(ai.id);
+        }
+
+        function humanPlay() {
+            let c = players[0].hand.filter(x=>x.selected); if(c.length===0) return;
+            let v = isValidPlay(players[0], c); if(!v.valid) { alert(v.msg); return; }
+            executePlay(0, c);
+        }
+        function humanPass() { executePass(0); }
+
+        function calculateScore(winIdx) {
+            stopTurnTimer();
+            let ls = [0,1,2,3].filter(i=>i!==winIdx);
+            ls.sort((a,b) => players[a].hand.length - players[b].hand.length || rankMap[getAbsMax(players[a]).v] - rankMap[getAbsMax(players[b]).v] || suitRanks[getAbsMax(players[a]).s] - suitRanks[getAbsMax(players[b]).s]);
+            
+            let idL1 = ls[0], idL2 = ls[1], idL3 = ls[2], idW = winIdx;
+            let c1 = players[idL1].hand.length, c2 = players[idL2].hand.length, c3 = players[idL3].hand.length;
+            let sc = {0:0,1:0,2:0,3:0}, bd = {0:"",1:"",2:"",3:""};
+            
+            let isAllWin = (c1 === c2 && c2 === c3);
+            let isAllLose = (c1 === 1 && c2 === 2 && c3 === 3);
+            let mult = Math.pow(2, bombCount + sfCount);
+
+            let tL2="", tL3="";
+            if(!isAllWin && !isAllLose) {
+                if(c1===c2) tL2 = `<br><span style="color:#FFAA00;font-size:11px;">(同牌比底牌: ${getAbsMax(players[idL2]).s}${getAbsMax(players[idL2]).v} 劣于 ${getAbsMax(players[idL1]).s}${getAbsMax(players[idL1]).v})</span>`;
+                if(c2===c3) tL3 = `<br><span style="color:#FFAA00;font-size:11px;">(同牌比底牌: ${getAbsMax(players[idL3]).s}${getAbsMax(players[idL3]).v} 劣于 ${getAbsMax(players[idL2]).s}${getAbsMax(players[idL2]).v})</span>`;
+            }
+
+            if(isAllWin) { let p=getMult(c1)*BASE_SCORE*mult; [idL1,idL2,idL3].forEach(id=>{sc[id]-=p; bd[id]=`遭通杀 -${p}`;}); sc[idW]+=p*3; bd[idW]=`通杀三家 +${p*3}`; }
+            else if(isAllLose) { let t=0; [idL1,idL2,idL3].forEach(id=>{let p=getMult(players[id].hand.length)*BASE_SCORE*mult; sc[id]+=p; bd[id]=`反杀 +${p}`; t+=p;}); sc[idW]-=t; bd[idW]=`遭反杀包赔 -${t}`; }
+            else { 
+                let p21=getMult(c2)*BASE_SCORE*mult, p3W=getMult(c3)*BASE_SCORE*mult; 
+                sc[idL1]+=p21; bd[idL1]=`赢第三名 +${p21}`;
+                sc[idL2]-=p21; bd[idL2]=`输次名 -${p21}`+tL2;
+                sc[idW]+=p3W;  bd[idW]=`赢末名 +${p3W}`;
+                sc[idL3]-=p3W; bd[idL3]=`输赢家 -${p3W}`+tL3;
+            }
+
+            let typeP = (bombCount*3*BASE_SCORE)+(sfCount*4*BASE_SCORE);
+            let win9P = 0, win9Html = "";
+            finalPlayCards.forEach(c => { if(c.v==='9') { win9P+=suitRanks[c.s]*BASE_SCORE; win9Html+=` ${c.s}9`; }});
+
+            let unplayHtml = "";
+            ls.forEach(id=>players[id].hand.forEach(c=>{ 
+                if(c.v==='9'){ 
+                    let p=suitRanks[c.s]*BASE_SCORE; sc[id]-=p; sc[idW]+=p; 
+                    players[id].m9 = (players[id].m9||0)+p; unplayHtml+=`[${players[id].name}]闷${c.s}9赔${p} `; 
+                }
+            }));
+
+            if(typeP>0) { [idL1,idL2,idL3].forEach(i=>sc[i]-=typeP); sc[idW]+=typeP*3; }
+            if(win9P>0) { [idL1,idL2,idL3].forEach(i=>sc[i]-=win9P); sc[idW]+=win9P*3; }
+            
+            [0,1,2,3].forEach(i=>{
+                sc[i] += kongPenalties[i];
+                sc[i] += seqOnePenalties[i];
+                sc[i] += blackHitsRedPenalties[i];
+            });
+
+            let html = ``;
+            if (isAllWin) html += `<div class="special-event-title win-all">🏆【通吃局！】剩余排数均是 ${c1} 张，赢家通杀！</div>`;
+            if (isAllLose) html += `<div class="special-event-title lose-all">💀【爆掉全输！】1,2,3 铁壁防守，头名惨遭反杀！</div>`;
+            if (win9P > 0) html += `<p style="color:#FF3333; font-size:16px; margin:5px 0;">🔥 赢家【${win9Html}】结尾，全场额外进贡 ${win9P} 分！</p>`;
+            if (unplayHtml !== "") html += `<p style="color:#00FFFF; font-size:14px; margin:5px 0;">💣 闷九惩罚：${unplayHtml}</p>`;
+
+            let tableHtml = `<table class="score-table"><tr><th>排位(玩家)</th><th>剩牌</th><th>对位得失</th><th>杠牌</th><th>连环1罚</th><th>黑打红</th><th>其他(型/9尾/闷)</th><th>总计</th></tr>`;
+            let ordered = [
+                { role: isAllWin?"平局输家":(isAllLose?"反杀赢家":"次名"), id: idL1 },
+                { role: isAllWin?"平局输家":(isAllLose?"反杀赢家":"第三名"), id: idL2 },
+                { role: isAllWin?"平局输家":(isAllLose?"反杀赢家":"末名"), id: idL3 }
+            ];
+
+            ordered.forEach(item => {
+                let p = players[item.id], oStr = "";
+                if(typeP>0) oStr += `型:-${typeP}<br>`;
+                if(win9P>0) oStr += `9尾:-${win9P}<br>`;
+                if(p.m9) oStr += `闷9:-${p.m9}<br>`;
+                
+                tableHtml += `<tr>
+                    <td>${item.role} (${p.name})</td>
+                    <td>${p.hand.length}</td>
+                    <td>${bd[p.id]}</td>
+                    <td>${kongPenalties[p.id]!==0 ? (kongPenalties[p.id]>0?'+'+kongPenalties[p.id]:kongPenalties[p.id]) : "0"}</td>
+                    <td>${seqOnePenalties[p.id]!==0 ? (seqOnePenalties[p.id]>0?'+'+seqOnePenalties[p.id]:seqOnePenalties[p.id]) : "0"}</td>
+                    <td>${blackHitsRedPenalties[p.id]!==0 ? (blackHitsRedPenalties[p.id]>0?'+'+blackHitsRedPenalties[p.id]:blackHitsRedPenalties[p.id]) : "0"}</td>
+                    <td>${oStr||"0"}</td>
+                    <td class="${sc[p.id]>=0?'highlight-green':'highlight-red'}">${sc[p.id]>0?'+'+sc[p.id]:sc[p.id]}</td>
+                </tr>`;
+            });
+
+            let woStr = "", wM9 = ls.reduce((s,i)=>s+(players[i].m9||0),0);
+            if(typeP>0) woStr += `型:+${typeP*3}<br>`;
+            if(win9P>0) woStr += `9尾:+${win9P*3}<br>`;
+            if(wM9>0) woStr += `收闷9:+${wM9}<br>`;
+
+            tableHtml += `<tr class="score-winner">
+                <td style="color:#FFD700">🏆 赢家 (${players[idW].name})</td>
+                <td>0</td>
+                <td>${bd[idW]}</td>
+                <td>${kongPenalties[idW]!==0 ? (kongPenalties[idW]>0?'+'+kongPenalties[idW]:kongPenalties[idW]) : "0"}</td>
+                <td>${seqOnePenalties[idW]!==0 ? (seqOnePenalties[idW]>0?'+'+seqOnePenalties[idW]:seqOnePenalties[idW]) : "0"}</td>
+                <td>${blackHitsRedPenalties[idW]!==0 ? (blackHitsRedPenalties[idW]>0?'+'+blackHitsRedPenalties[idW]:blackHitsRedPenalties[idW]) : "0"}</td>
+                <td>${woStr||"0"}</td>
+                <td class="${sc[idW]>=0?'highlight-green':'highlight-red'}">${sc[idW]>0?'+'+sc[idW]:sc[idW]}</td>
+            </tr></table>`;
+            
+            tableHtml += `<p style="font-size:13px; color:#AAA; margin-top:8px;">(全局产生炸弹: ${bombCount} 次，同花顺: ${sfCount} 次)</p>`;
+
+            document.getElementById('score-content').innerHTML = html + tableHtml;
+            document.getElementById('score-panel').style.display = 'block';
+        }
+        function getMult(n){ return n<=4?1:(n<=6?2:(n<=8?3:4)); }
+        initGame();
+    </script>
+</body>
+</html>
